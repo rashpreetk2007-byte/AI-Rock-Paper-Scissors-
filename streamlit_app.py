@@ -1,12 +1,11 @@
 import streamlit as st
 import random
-import io
-import csv
-from PIL import Image, ImageStat
-
+from datetime import datetime
 
 # ============================================================
-# PAGE CONFIG
+# AI ROCK PAPER SCISSORS
+# Created by Rashpreet Kaur Arora
+# BCA II Year
 # ============================================================
 
 st.set_page_config(
@@ -15,50 +14,93 @@ st.set_page_config(
     layout="centered"
 )
 
-
 # ============================================================
-# CUSTOM CSS
+# CSS
 # ============================================================
 
 st.markdown("""
 <style>
 
-.main-title {
+.block-container {
+    max-width: 950px;
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.hero {
     text-align: center;
+    padding: 20px 5px 10px;
+}
+
+.title {
     font-size: 42px;
     font-weight: 800;
-    margin-bottom: 5px;
 }
 
 .subtitle {
-    text-align: center;
-    font-size: 17px;
-    margin-bottom: 5px;
+    font-size: 18px;
+    color: #666;
 }
 
 .creator {
-    text-align: center;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
-    margin-bottom: 20px;
+    margin-top: 10px;
 }
 
-.card {
-    padding: 18px;
+.game-card {
+    background: white;
+    padding: 22px;
     border-radius: 20px;
-    border: 1px solid rgba(128,128,128,0.25);
-    margin: 10px 0;
+    border: 1px solid #e5e7eb;
+    margin: 12px 0;
+    text-align: center;
 }
 
-.detected {
+.move {
+    font-size: 65px;
+    margin: 10px;
+}
+
+.move-name {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.win {
+    padding: 25px;
+    border-radius: 20px;
     text-align: center;
+    background: #e9f9ef;
+    border: 2px solid #45b96b;
+}
+
+.lose {
+    padding: 25px;
+    border-radius: 20px;
+    text-align: center;
+    background: #fff0f0;
+    border: 2px solid #df6464;
+}
+
+.draw {
+    padding: 25px;
+    border-radius: 20px;
+    text-align: center;
+    background: #fff8df;
+    border: 2px solid #e1b93d;
+}
+
+.result-text {
     font-size: 30px;
     font-weight: 800;
-    padding: 15px;
 }
 
-.small-center {
+.footer {
     text-align: center;
+    color: #777;
+    padding-top: 30px;
+    line-height: 1.7;
 }
 
 </style>
@@ -77,78 +119,42 @@ defaults = {
     "streak": 0,
     "best_streak": 0,
     "history": [],
-    "last_result": None,
-    "last_computer": None,
     "last_player": None,
+    "last_computer": None,
+    "last_result": None,
+    "game_over": False
 }
 
 for key, value in defaults.items():
-
     if key not in st.session_state:
         st.session_state[key] = value
 
 
 # ============================================================
-# GESTURES
+# GAME DATA
 # ============================================================
 
-GESTURES = {
+moves = {
     "Rock": "✊",
     "Paper": "✋",
     "Scissors": "✌️"
 }
 
-
-# ============================================================
-# LIGHTWEIGHT IMAGE ANALYSIS
-# ============================================================
-
-def analyze_image(image):
-
-    """
-    Lightweight heuristic.
-
-    IMPORTANT:
-    This is NOT a trained AI model.
-    It only analyses basic image characteristics.
-    """
-
-    img = image.convert("RGB")
-    img.thumbnail((300, 300))
-
-    stat = ImageStat.Stat(img)
-
-    brightness = sum(stat.mean) / 3
-
-    # Estimate visual complexity using channel variation
-    variation = sum(stat.rms) / 3
-
-    # Conservative heuristic
-    # Most uncertain images return low confidence.
-
-    if brightness < 70:
-        gesture = "Rock"
-        confidence = 52
-
-    elif variation > 145:
-        gesture = "Paper"
-        confidence = 50
-
-    else:
-        gesture = "Scissors"
-        confidence = 48
-
-    return gesture, confidence
+counter_move = {
+    "Rock": "Paper",
+    "Paper": "Scissors",
+    "Scissors": "Rock"
+}
 
 
 # ============================================================
-# GAME LOGIC
+# FUNCTIONS
 # ============================================================
 
-def winner(player, computer):
+def get_result(player, computer):
 
     if player == computer:
-        return "DRAW"
+        return "Draw"
 
     if (
         (player == "Rock" and computer == "Scissors")
@@ -157,220 +163,361 @@ def winner(player, computer):
         or
         (player == "Scissors" and computer == "Paper")
     ):
-        return "PLAYER"
+        return "Player"
 
-    return "COMPUTER"
+    return "Computer"
+
+
+def reset_game():
+
+    st.session_state.player_score = 0
+    st.session_state.computer_score = 0
+    st.session_state.draws = 0
+    st.session_state.round = 0
+    st.session_state.streak = 0
+    st.session_state.best_streak = 0
+    st.session_state.history = []
+    st.session_state.last_player = None
+    st.session_state.last_computer = None
+    st.session_state.last_result = None
+    st.session_state.game_over = False
+
+
+def target_score(mode):
+
+    if mode == "Best of 3":
+        return 2
+
+    if mode == "Best of 5":
+        return 3
+
+    if mode == "Best of 7":
+        return 4
+
+    return 1
 
 
 # ============================================================
 # HEADER
 # ============================================================
 
-st.markdown(
-    '<div class="main-title">✊ AI Rock Paper Scissors</div>',
-    unsafe_allow_html=True
-)
+st.markdown("""
+<div class="hero">
 
-st.markdown(
-    '<div class="subtitle">'
-    '📷 Camera • 🔍 Gesture Analysis • 🎮 Game'
-    '</div>',
-    unsafe_allow_html=True
-)
+<div class="title">
+✊ AI Rock Paper Scissors
+</div>
 
-st.markdown(
-    '<div class="creator">'
-    'Created by Rashpreet Kaur Arora'
-    '</div>',
-    unsafe_allow_html=True
-)
+<div class="subtitle">
+🎮 Interactive Camera-Based Game
+</div>
+
+<div class="creator">
+Created by Rashpreet Kaur Arora
+</div>
+
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
 
 # ============================================================
-# SCORE
+# PLAYER SETTINGS
 # ============================================================
 
-st.subheader("🏆 SCORE")
+st.header("👤 Player Settings")
+
+player_name = st.text_input(
+    "Player Name",
+    value="Rashpreet"
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    difficulty = st.selectbox(
+        "🤖 Difficulty",
+        [
+            "Easy",
+            "Normal",
+            "Hard"
+        ]
+    )
+
+with col2:
+
+    mode = st.selectbox(
+        "🏆 Match Mode",
+        [
+            "Single Round",
+            "Best of 3",
+            "Best of 5",
+            "Best of 7"
+        ]
+    )
+
+target = target_score(mode)
+
+
+# ============================================================
+# SCOREBOARD
+# ============================================================
+
+st.divider()
+
+st.header("🏆 Scoreboard")
 
 a, b, c, d = st.columns(4)
 
 with a:
-    st.metric("👤 You", st.session_state.player_score)
+    st.metric(
+        "👤 You",
+        st.session_state.player_score
+    )
 
 with b:
-    st.metric("🤖 Computer", st.session_state.computer_score)
+    st.metric(
+        "🤖 Computer",
+        st.session_state.computer_score
+    )
 
 with c:
-    st.metric("🤝 Draws", st.session_state.draws)
+    st.metric(
+        "🤝 Draws",
+        st.session_state.draws
+    )
 
 with d:
-    st.metric("🔥 Streak", st.session_state.streak)
+    st.metric(
+        "🔥 Streak",
+        st.session_state.streak
+    )
 
-
-st.divider()
+st.caption(
+    f"Match target: {target} win(s)"
+)
 
 
 # ============================================================
 # CAMERA
 # ============================================================
 
-st.subheader("📷 Show Your Hand")
+st.divider()
+
+st.header("📸 Camera")
 
 st.write(
-    "Show one clear gesture in front of the camera:"
+    "Show your hand in front of the camera and capture the image."
 )
 
-st.write(
-    "✊ Rock   •   ✋ Paper   •   ✌️ Scissors"
+st.markdown(
+    """
+    ✊ **Rock** &nbsp;&nbsp;&nbsp;
+    ✋ **Paper** &nbsp;&nbsp;&nbsp;
+    ✌️ **Scissors**
+    """
 )
 
 photo = st.camera_input(
-    "Capture Hand Gesture"
+    "Take Hand Gesture Photo"
+)
+
+if photo is not None:
+
+    st.success(
+        "✅ Hand image captured successfully!"
+    )
+
+    st.image(
+        photo,
+        caption="Your Captured Hand Gesture",
+        use_container_width=True
+    )
+
+
+# ============================================================
+# GESTURE SELECTION
+# ============================================================
+
+st.divider()
+
+st.header("🖐 Select Your Gesture")
+
+st.info(
+    "Select the gesture shown in your camera photo."
+)
+
+gesture = st.radio(
+    "Your Gesture",
+    [
+        "Rock",
+        "Paper",
+        "Scissors"
+    ],
+    horizontal=True,
+    format_func=lambda x:
+        f"{moves[x]} {x}"
+)
+
+st.markdown(
+    f"""
+    <div class="game-card">
+
+    <div class="move">
+    {moves[gesture]}
+    </div>
+
+    <div class="move-name">
+    Your Choice: {gesture}
+    </div>
+
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
 
 # ============================================================
-# IMAGE ANALYSIS
+# PLAY BUTTON
 # ============================================================
 
-if photo is not None:
-
-    image = Image.open(photo)
-
-    st.success("📸 Image captured successfully!")
-
-    st.image(
-        image,
-        caption="Captured Hand Gesture",
-        use_container_width=True
-    )
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # ANALYZE
-    # --------------------------------------------------------
-
-    st.subheader("🔍 Gesture Analysis")
-
-    with st.spinner("Analyzing your hand..."):
-
-        detected, confidence = analyze_image(image)
-
-    emoji = GESTURES[detected]
-
-    st.markdown(
-        f"""
-        <div class="card">
-        <div class="small-center">DETECTED GESTURE</div>
-        <div class="detected">{emoji} {detected.upper()}</div>
-        <div class="small-center">
-        Confidence: {confidence}%
-        </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.progress(
-        confidence / 100
-    )
-
-    st.warning(
-        "⚠️ This is a lightweight image heuristic, "
-        "not a trained hand-recognition AI model."
-    )
-
-    # --------------------------------------------------------
-    # CORRECTION
-    # --------------------------------------------------------
-
-    st.subheader("✅ Confirm Gesture")
-
-    confirmed = st.radio(
-        "If detection is incorrect, select the correct gesture:",
-        [
-            "✊ Rock",
-            "✋ Paper",
-            "✌️ Scissors"
-        ],
-        index=[
-            "Rock",
-            "Paper",
-            "Scissors"
-        ].index(detected),
-        horizontal=True
-    )
-
-    player = confirmed.split(" ", 1)[1]
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # PLAY
-    # --------------------------------------------------------
+if not st.session_state.game_over:
 
     if st.button(
         "🎮 PLAY ROUND",
-        use_container_width=True
+        use_container_width=True,
+        type="primary"
     ):
 
-        computer = random.choice(
-            ["Rock", "Paper", "Scissors"]
-        )
+        # ----------------------------------------------------
+        # COMPUTER MOVE
+        # ----------------------------------------------------
 
-        result = winner(
-            player,
+        if difficulty == "Easy":
+
+            computer = random.choice(
+                list(moves.keys())
+            )
+
+        elif difficulty == "Normal":
+
+            if random.random() < 0.35:
+
+                computer = counter_move[gesture]
+
+            else:
+
+                computer = random.choice(
+                    list(moves.keys())
+                )
+
+        else:
+
+            if random.random() < 0.65:
+
+                computer = counter_move[gesture]
+
+            else:
+
+                computer = random.choice(
+                    list(moves.keys())
+                )
+
+        # ----------------------------------------------------
+        # RESULT
+        # ----------------------------------------------------
+
+        result = get_result(
+            gesture,
             computer
         )
 
         st.session_state.round += 1
 
+        st.session_state.last_player = gesture
+
+        st.session_state.last_computer = computer
+
+        st.session_state.last_result = result
+
         # ----------------------------------------------------
-        # UPDATE SCORE
+        # SCORE
         # ----------------------------------------------------
 
-        if result == "PLAYER":
+        if result == "Player":
 
             st.session_state.player_score += 1
+
             st.session_state.streak += 1
 
-            st.session_state.best_streak = max(
-                st.session_state.best_streak,
+            if (
                 st.session_state.streak
-            )
+                >
+                st.session_state.best_streak
+            ):
 
-            result_text = "🎉 YOU WIN!"
+                st.session_state.best_streak = (
+                    st.session_state.streak
+                )
 
-        elif result == "COMPUTER":
+        elif result == "Computer":
 
             st.session_state.computer_score += 1
-            st.session_state.streak = 0
 
-            result_text = "🤖 COMPUTER WINS!"
+            st.session_state.streak = 0
 
         else:
 
             st.session_state.draws += 1
 
-            result_text = "🤝 DRAW!"
-
         # ----------------------------------------------------
-        # SAVE
+        # HISTORY
         # ----------------------------------------------------
 
-        st.session_state.last_player = player
-        st.session_state.last_computer = computer
-        st.session_state.last_result = result_text
+        st.session_state.history.append(
+            {
+                "Round":
+                    st.session_state.round,
 
-        st.session_state.history.append({
-            "Round": st.session_state.round,
-            "Player": player,
-            "Computer": computer,
-            "Result": result_text
-        })
+                "Player":
+                    gesture,
+
+                "Computer":
+                    computer,
+
+                "Result":
+                    result,
+
+                "Time":
+                    datetime.now().strftime(
+                        "%H:%M:%S"
+                    )
+            }
+        )
+
+        # ----------------------------------------------------
+        # MATCH END
+        # ----------------------------------------------------
+
+        if mode == "Single Round":
+
+            st.session_state.game_over = True
+
+        else:
+
+            if (
+                st.session_state.player_score
+                >= target
+                or
+                st.session_state.computer_score
+                >= target
+            ):
+
+                st.session_state.game_over = True
+
+        st.rerun()
 
 
 # ============================================================
@@ -381,66 +528,145 @@ if st.session_state.last_result:
 
     st.divider()
 
-    st.subheader("🎯 RESULT")
+    st.header("🎯 Round Result")
 
-    r1, r2 = st.columns(2)
+    player_move = st.session_state.last_player
 
-    with r1:
+    computer_move = st.session_state.last_computer
+
+    result = st.session_state.last_result
+
+    c1, c2 = st.columns(2)
+
+    with c1:
 
         st.markdown(
             f"""
-            <div class="card">
-            <div class="small-center">
-            👤 YOUR MOVE
+            <div class="game-card">
+
+            <h3>👤 {player_name}</h3>
+
+            <div class="move">
+            {moves[player_move]}
             </div>
-            <div class="detected">
-            {GESTURES[st.session_state.last_player]}
+
+            <div class="move-name">
+            {player_move}
             </div>
-            <div class="small-center">
-            {st.session_state.last_player}
-            </div>
+
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    with r2:
+    with c2:
 
         st.markdown(
             f"""
-            <div class="card">
-            <div class="small-center">
-            🤖 COMPUTER
+            <div class="game-card">
+
+            <h3>🤖 Computer</h3>
+
+            <div class="move">
+            {moves[computer_move]}
             </div>
-            <div class="detected">
-            {GESTURES[st.session_state.last_computer]}
+
+            <div class="move-name">
+            {computer_move}
             </div>
-            <div class="small-center">
-            {st.session_state.last_computer}
-            </div>
+
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    if "YOU WIN" in st.session_state.last_result:
 
-        st.success(
-            "🎉 YOU WIN!"
+    # --------------------------------------------------------
+    # RESULT MESSAGE
+    # --------------------------------------------------------
+
+    if result == "Player":
+
+        st.markdown(
+            """
+            <div class="win">
+
+            <div class="result-text">
+            🎉 YOU WIN!
+            </div>
+
+            <p>Excellent move!</p>
+
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        st.balloons()
+    elif result == "Computer":
 
-    elif "COMPUTER" in st.session_state.last_result:
+        st.markdown(
+            """
+            <div class="lose">
 
-        st.error(
-            "🤖 COMPUTER WINS!"
+            <div class="result-text">
+            🤖 COMPUTER WINS!
+            </div>
+
+            <p>Try another strategy.</p>
+
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
     else:
 
-        st.info(
-            "🤝 DRAW!"
+        st.markdown(
+            """
+            <div class="draw">
+
+            <div class="result-text">
+            🤝 DRAW!
+            </div>
+
+            <p>Both players selected the same move.</p>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+# ============================================================
+# MATCH RESULT
+# ============================================================
+
+if st.session_state.game_over:
+
+    st.divider()
+
+    if mode == "Single Round":
+
+        st.success(
+            "🏁 Round completed!"
+        )
+
+    elif (
+        st.session_state.player_score
+        >= target
+    ):
+
+        st.success(
+            f"🏆 {player_name} WON THE MATCH!"
+        )
+
+    elif (
+        st.session_state.computer_score
+        >= target
+    ):
+
+        st.error(
+            "🤖 COMPUTER WON THE MATCH!"
         )
 
 
@@ -448,187 +674,179 @@ if st.session_state.last_result:
 # STATISTICS
 # ============================================================
 
-total_games = (
+st.divider()
+
+st.header("📊 Game Statistics")
+
+total = (
     st.session_state.player_score
-    + st.session_state.computer_score
-    + st.session_state.draws
+    +
+    st.session_state.computer_score
+    +
+    st.session_state.draws
 )
 
-if total_games > 0:
-
-    st.divider()
-
-    st.subheader("📊 PERFORMANCE")
+if total > 0:
 
     win_rate = (
         st.session_state.player_score
-        / total_games
+        / total
     ) * 100
 
-    x, y = st.columns(2)
+else:
 
-    with x:
-        st.metric(
-            "Total Games",
-            total_games
-        )
+    win_rate = 0
 
-    with y:
-        st.metric(
-            "Win Rate",
-            f"{win_rate:.1f}%"
-        )
 
-    st.write(
-        f"🔥 Best Streak: "
-        f"**{st.session_state.best_streak}**"
+s1, s2, s3 = st.columns(3)
+
+with s1:
+
+    st.metric(
+        "🎮 Total Rounds",
+        total
     )
 
-    st.progress(
-        win_rate / 100
+with s2:
+
+    st.metric(
+        "📈 Win Rate",
+        f"{win_rate:.1f}%"
+    )
+
+with s3:
+
+    st.metric(
+        "🔥 Best Streak",
+        st.session_state.best_streak
     )
 
 
 # ============================================================
-# HISTORY
+# GAME HISTORY
 # ============================================================
 
 if st.session_state.history:
 
     st.divider()
 
-    st.subheader("📜 GAME HISTORY")
+    st.header("📜 Game History")
 
     for game in reversed(
         st.session_state.history
     ):
 
+        if game["Result"] == "Player":
+
+            icon = "✅"
+
+        elif game["Result"] == "Computer":
+
+            icon = "❌"
+
+        else:
+
+            icon = "🤝"
+
         st.write(
-            f"**Round {game['Round']}** | "
-            f"You: {game['Player']} | "
-            f"Computer: {game['Computer']} | "
-            f"{game['Result']}"
+            f"{icon} **Round {game['Round']}** — "
+            f"{moves[game['Player']]} "
+            f"{game['Player']} vs "
+            f"{moves[game['Computer']]} "
+            f"{game['Computer']} — "
+            f"**{game['Result']}** "
+            f"({game['Time']})"
         )
-
-    # --------------------------------------------------------
-    # CSV
-    # --------------------------------------------------------
-
-    output = io.StringIO()
-
-    writer = csv.DictWriter(
-        output,
-        fieldnames=[
-            "Round",
-            "Player",
-            "Computer",
-            "Result"
-        ]
-    )
-
-    writer.writeheader()
-
-    writer.writerows(
-        st.session_state.history
-    )
-
-    st.download_button(
-        "⬇️ Download Game History",
-        output.getvalue(),
-        "rock_paper_scissors_history.csv",
-        "text/csv",
-        use_container_width=True
-    )
 
 
 # ============================================================
-# RESET
+# BUTTONS
 # ============================================================
 
 st.divider()
 
-if st.button(
-    "🔄 NEW GAME",
-    use_container_width=True
-):
+b1, b2 = st.columns(2)
 
-    for key, value in defaults.items():
+with b1:
 
-        if isinstance(value, list):
-            st.session_state[key] = []
+    if st.button(
+        "🔄 NEW GAME",
+        use_container_width=True
+    ):
 
-        else:
-            st.session_state[key] = value
+        reset_game()
 
-    st.rerun()
+        st.rerun()
+
+
+with b2:
+
+    if st.button(
+        "🧹 CLEAR HISTORY",
+        use_container_width=True
+    ):
+
+        st.session_state.history = []
+
+        st.rerun()
 
 
 # ============================================================
-# PROJECT INFO
+# HOW TO PLAY
 # ============================================================
 
-with st.expander("ℹ️ About Project"):
+st.divider()
 
-    st.write(
-        """
-        AI Rock Paper Scissors is an educational Python and
-        Streamlit project created by Rashpreet Kaur Arora.
+st.header("📖 How to Play")
 
-        The application uses the device camera to capture a
-        hand image and performs lightweight image analysis.
+st.markdown("""
+**Step 1:** Enter your name.
 
-        The detected gesture can be confirmed or corrected
-        before playing the round.
-        """
-    )
+**Step 2:** Select difficulty.
 
+**Step 3:** Select match mode.
 
-with st.expander("🛠️ Technologies Used"):
+**Step 4:** Show your hand to the camera.
 
-    st.write(
-        """
-        🐍 Python
+**Step 5:** Capture the photo.
 
-        🎨 Streamlit
+**Step 6:** Select Rock, Paper or Scissors according to your hand.
 
-        🖼️ Pillow
+**Step 7:** Press **PLAY ROUND**.
 
-        🔢 NumPy
+**Step 8:** Compare your move with the computer.
 
-        🌐 Requests
-        """
-    )
+**Step 9:** Check your score, streak and game history.
+""")
 
 
-with st.expander("⚠️ Recognition Note"):
+# ============================================================
+# TECHNICAL NOTE
+# ============================================================
 
-    st.write(
-        """
-        The current mobile version does not use OpenCV or
-        MediaPipe.
-
-        Therefore the image analysis is only a lightweight
-        heuristic and should not be considered a trained
-        AI hand-gesture classifier.
-
-        A trained model can be integrated in a future version.
-        """
-    )
+st.info(
+    "Camera capture is implemented without OpenCV or MediaPipe. "
+    "The current version does not automatically classify the "
+    "captured hand image; the player selects the gesture manually."
+)
 
 
 # ============================================================
 # FOOTER
 # ============================================================
 
-st.divider()
+st.markdown("""
+<div class="footer">
 
-st.markdown(
-    """
-    <div class="creator">
-    ✊ AI Rock Paper Scissors<br>
-    Created by Rashpreet Kaur Arora<br>
-    BCA Student • 2026
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+<b>✊ AI Rock Paper Scissors</b><br>
+
+Interactive Camera-Based Game<br>
+
+Built with Python + Streamlit + Pillow<br><br>
+
+<strong>Created by Rashpreet Kaur Arora</strong><br>
+
+BCA II Year • Educational Project
+
+</div>
+""", unsafe_allow_html=True)
